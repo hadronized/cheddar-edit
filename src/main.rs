@@ -19,7 +19,8 @@ fn main() {
   let quad: Quad = Tess::new(Mode::TriangleFan, &QUAD_TRIS[..], None);
 
   let mut shader_context: Buffer<ShaderToyContext> = Buffer::new(1);
-  let shader = cache.get::<Program<QuadVert, (), ShaderToyUniforms>>("toy.glsl", ()).unwrap();
+  let default_shader = Program::from_str(DEFAULT_SHADER_SRC).unwrap();
+  let shader = cache.get_proxied::<Program<QuadVert, (), ShaderToyUniforms>, _>("toy.glsl", (), move || { default_shader }).unwrap();
 
   shader_context.as_slice_mut().unwrap()[0].res = res;
 
@@ -84,3 +85,21 @@ const QUAD_TRIS: [QuadVert; 4] = [
   [ 1.,  1.],
   [-1.,  1.]
 ];
+
+const DEFAULT_SHADER_SRC: &'static str = r#"
+#vs
+
+layout (location = 0) in vec2 p;
+
+void main() {
+  gl_Position = vec4(p, 0., 1.);
+}
+
+#fs
+
+out vec4 frag;
+
+void main() {
+  frag = vec4(.8, .5, .8, 1.);
+}
+"#;
