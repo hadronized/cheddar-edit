@@ -1,20 +1,24 @@
 #[macro_use]
 extern crate spectra;
 
-use spectra::bootstrap::{Action, EventHandler, EventSig, Key, WindowOpt};
+use spectra::bootstrap::{FreeflyHandler, WindowOpt};
+use spectra::camera::Camera;
 use spectra::framebuffer::Framebuffer2D;
 use spectra::luminance::buffer::{Binding, Buffer};
 use spectra::luminance::pipeline::Pipeline;
 use spectra::luminance::shader::program;
 use spectra::luminance::tess::{Mode, Tess};
+use spectra::projection::Projectable;
 use spectra::resource::ResCache;
 use spectra::shader::{Program, Uniform, UniformBuilder, UniformInterface, UniformWarning, UnwrapOrUnbound};
 use spectra::texture::{Sampler, TextureImage, TextureRGBA32F, Unit};
+use spectra::transform::Transformable;
 
 fn main() {
   let mut dev = bootstrap!(960, 540, WindowOpt::default()).unwrap();
   let mut cache = ResCache::new("data");
-  let mut handler = Handler;
+  let camera = cache.get_proxied("default.json", (), || { Camera::default() });
+  let mut handler = FreeflyHandler::new(camera.as_rc().clone());
   let screen = Framebuffer2D::default([dev.width(), dev.height()]);
   let res = [dev.width() as f32, dev.height() as f32, 1. / (dev.width() as f32), 1. / (dev.height() as f32)];
   let quad: Quad = Tess::new(Mode::TriangleFan, &QUAD_TRIS[..], None);
@@ -38,7 +42,12 @@ fn main() {
     })
   }).collect();
 
-  shader_context.as_slice_mut().unwrap()[0].res = res;
+  {
+    let context = &mut shader_context.as_slice_mut().unwrap()[0];
+
+    context.res = res;
+    context.proj = camera.borrow().projection().into();
+  }
 
   while dev.dispatch_events(&mut handler) {
     dev.step(60, |t| {
@@ -71,7 +80,12 @@ fn main() {
         &***tex_11
       ];
 
-      shader_context.as_slice_mut().unwrap()[0].t = t as f32;
+      {
+        let context = &mut shader_context.as_slice_mut().unwrap()[0];
+        
+        context.t = t as f32;
+        context.view = camera.borrow().transform().into();
+      }
 
       Pipeline::new(&screen, [0., 0., 0., 1.], &textures[..], &[&shader_context]).enter(|shd_gate| {
         let shader = shader.borrow();
@@ -90,19 +104,10 @@ fn main() {
   }
 }
 
-struct Handler;
-
-impl EventHandler for Handler {
-  fn on_key(&mut self, key: Key, action: Action) -> EventSig {
-    match (key, action) {
-      (Key::Escape, Action::Release) => EventSig::Aborted,
-      _ => EventSig::Handled
-    }
-  }
-}
-
 struct ShaderToyContext {
   res: [f32; 4],
+  proj: [[f32; 4]; 4],
+  view: [[f32; 4]; 4],
   t: f32,
 }
 

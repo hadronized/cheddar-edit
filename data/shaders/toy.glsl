@@ -12,6 +12,8 @@ void main() {
 
 uniform context {
   vec4 res;
+  mat4 proj;
+  mat4 view;
   float t;
 };
 
